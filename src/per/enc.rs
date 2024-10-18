@@ -2,7 +2,6 @@
 
 use alloc::collections::BTreeMap;
 use alloc::{borrow::ToOwned, string::ToString, vec::Vec};
-
 use bitvec::prelude::*;
 
 use super::{
@@ -162,6 +161,7 @@ impl Encoder {
 
     fn output_length(&self) -> usize {
         let mut output_length = self.output.len();
+
         output_length += self.is_extension_sequence as usize;
         output_length += self
             .field_bitfield
@@ -186,6 +186,7 @@ impl Encoder {
         if self.options.aligned {
             let mut output_length = self.output_length();
             output_length += buffer.len();
+
             if output_length % 8 != 0 {
                 for _ in 0..(8 - output_length % 8) {
                     buffer.push(false);
@@ -321,6 +322,7 @@ impl Encoder {
                 let value = value.to_index_or_value_bitstring();
 
                 let octet_aligned_value = &octet_aligned_value;
+
                 self.encode_string_length(
                     &mut buffer,
                     is_large_string,
@@ -476,11 +478,15 @@ impl Encoder {
                             )
                         })
                         .unwrap_or(range as i128);
+
+                    self.pad_to_alignment(buffer);
+
                     self.encode_non_negative_binary_integer(
                         buffer,
                         range,
                         &(effective_length as u32).to_be_bytes(),
                     );
+
                     if is_large_string {
                         self.pad_to_alignment(buffer);
                     }
@@ -601,6 +607,7 @@ impl Encoder {
         value: &[u8],
         buffer: &mut BitString,
     ) -> Result<()> {
+
         let octet_string_length = value.len();
         let extensible_is_present = self.encode_extensible_bit(&constraints, buffer, || {
             constraints.size().map_or(false, |size_constraint| {
@@ -618,7 +625,7 @@ impl Encoder {
             self.encode_length(buffer, value.len(), <_>::default(), |range| {
                 Ok(BitString::from_slice(&value[range]))
             })?;
-        } else if 0 == size.constraint.effective_value(value.len()).into_inner() {
+        } else if 0 == octet_string_length {
             // NO-OP
         } else if size.constraint.range() == Some(1) && size.constraint.as_start() <= Some(&2) {
             // ITU-T X.691 (02/2021) §17 NOTE: Octet strings of fixed length less than or equal to two octets are not octet-aligned.
@@ -627,9 +634,7 @@ impl Encoder {
                 Ok(BitString::from_slice(&value[range]))
             })?;
         } else {
-            if size.constraint.range() == Some(1) {
-                self.pad_to_alignment(buffer);
-            }
+
             self.encode_string_length(buffer, true, value.len(), Some(size), |range| {
                 Ok(BitString::from_slice(&value[range]))
             })?;
